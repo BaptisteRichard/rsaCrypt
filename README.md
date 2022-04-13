@@ -1,7 +1,8 @@
 # rsaCrypt : Crypt a filewith a public RSA key
 
 rsaCrypt allows you to crypt a file before sending it via an unsecure channel. RSA public key can be either manually provided or automatically downloaded from gitlab user's keys (only the first RSA key will be used)
-ier manuellement une clé publique (préalablement téléchargée)
+
+This project is loosely based on [Catacomb](https://github.com/twe4ked/catacomb) for the key retrieval and general structure but does a bit more.
 
 # Prerequisites
 
