@@ -23,8 +23,9 @@ encrypt() {
 
 	# Crypt the original file with the secret key
 	openssl enc -aes-256-cbc -md sha512 -pbkdf2 -iter 100000 -salt -in $file -pass file:"$TMP_KEY" | openssl base64 >> "$TMP_OUT"
-	
-	cat "$TMP_OUT" 
+
+	outfile="${file}.enc"
+	cat "$TMP_OUT" > $outfile
 
 }
 
@@ -32,19 +33,19 @@ encrypt() {
 decrypt () {
 
 	file=$2
-  key=$1
+	key=$1
 
 	# Creating temporary files for encryption
-  TMP_OUT="$(mktemp "${TMPDIR:-/tmp}/$(basename "$0").XXXXXX.out")"
-  TMP_KEY="$(mktemp "${TMPDIR:-/tmp}/$(basename "$0").XXXXXX.key")"
-  trap 'shred "$TMP_OUT" "$TMP_KEY" && rm -rf "$TMP_OUT" "$TMP_KEY" ' EXIT SIGINT
+	TMP_OUT="$(mktemp "${TMPDIR:-/tmp}/$(basename "$0").XXXXXX.out")"
+	TMP_KEY="$(mktemp "${TMPDIR:-/tmp}/$(basename "$0").XXXXXX.key")"
+	trap 'shred "$TMP_OUT" "$TMP_KEY" && rm -rf "$TMP_OUT" "$TMP_KEY" ' EXIT SIGINT
 
 
 	# Get the key part
-  grep -B 100 "$SEPARATOR" $file | grep -v "$SEPARATOR" | openssl base64 -d > "$TMP_OUT"
+	grep -B 100 "$SEPARATOR" $file | grep -v "$SEPARATOR" | openssl base64 -d > "$TMP_OUT"
 
 	# Try to decrypt the key
-  openssl rsautl -decrypt -inkey "$key" -in "$TMP_OUT" -out "$TMP_KEY"
+	openssl rsautl -decrypt -inkey "$key" -in "$TMP_OUT" -out "$TMP_KEY"
 
 	if  [[ $? -ne 0 ]] ; then
 
@@ -54,88 +55,89 @@ decrypt () {
 		# Change openssh key to RSA
 		cp $key "$TMP_KEY"
 		ssh-keygen -f "$TMP_KEY" -p -N "" -m pem
-		
+
 		# Decrypt the key again with the PEM key
 		openssl rsautl -decrypt -inkey "$TMP_KEY" -in "$TMP_OUT" -out "$TMP_KEY"
 
 	fi
 
 	# Get the crypted file part
-  grep -A 100 "$SEPARATOR" $file | grep -v "$SEPARATOR" | openssl base64 -d > "$TMP_OUT"
+	grep -A 100 "$SEPARATOR" $file | grep -v "$SEPARATOR" | openssl base64 -d > "$TMP_OUT"
 
-  # Decrypting the file contents
-	openssl enc -d -aes-256-cbc  -md sha512 -pbkdf2 -iter 100000 -in "$TMP_OUT" -pass file:"$TMP_KEY"
+	outfile=${file%.enc}
+
+	# Decrypting the file contents
+	openssl enc -d -aes-256-cbc  -md sha512 -pbkdf2 -iter 100000 -in "$TMP_OUT" -pass file:"$TMP_KEY" > $outfile
 
 }
 
 retrieve_keys() {
-  (curl -sf "https://gitlab.com/${1}.keys" | grep 'ssh-rsa' | head -n 1 && echo) > "$HOME/.ssh/$1.pub"
+	(curl -sf "https://gitlab.com/${1}.keys" | grep 'ssh-rsa' | head -n 1 && echo) > "$HOME/.ssh/$1.pub"
 
-  if [[ "$(grep ^ssh < "$HOME/.ssh/$1.pub" | wc -l)" -lt 1 ]]; then
-    echo "Could not find any SSH key for $1" >&2
-    exit 1
-  fi
+	if [[ "$(grep ^ssh < "$HOME/.ssh/$1.pub" | wc -l)" -lt 1 ]]; then
+		echo "Could not find any SSH key for $1" >&2
+		exit 1
+	fi
 }
 
 usage() {
 cat <<HERE
   USAGE:
-    Encryption :
-    $0 -e <-i public_key_file | -g gitlab handle> <file> > file.enc
-    Decryption :
-    $0 [-i secret_key_file] <file.enc> > file
+    Encryption : produces file.enc
+    $0 -e <-i public_key_file | -g gitlab handle> <file> 
+    Decryption : produces file
+    $0 [-i secret_key_file] <file.enc> 
 HERE
 exit;
 }
 
 
 
-	if [[ "$#" -lt 1 ]] ; then 
-		echo "Wrong number of arguments"
-		usage ; 
-	fi ;
+if [[ "$#" -lt 1 ]] ; then 
+	echo "Wrong number of arguments"
+	usage ; 
+fi ;
 
-	mode="decrypt"
-  KEY=""
+mode="decrypt"
+KEY=""
 
-	while getopts "ei:g:" option; do
-		  case "${option}" in
-		      i)
-		          if [[ -r "${OPTARG}" ]] ; then
-								echo "Using key file ${OPTARG}" >& 2
-      					KEY=${OPTARG}
-    					else
-								echo "Unable to open key file ${OPTARG}"
-								usage
-							fi
-		          ;;
-		      g)
-		          retrieve_keys ${OPTARG}
-							KEY="$HOME/.ssh/${OPTARG}.pub"
-		          ;;
-          e)
-		          mode="crypt"
-		          ;;
-		  esac
-	done
-	shift $((OPTIND-1))
+while getopts "ei:g:" option; do
+	case "${option}" in
+		i)
+			if [[ -r "${OPTARG}" ]] ; then
+				echo "Using key file ${OPTARG}" >& 2
+				KEY=${OPTARG}
+			else
+				echo "Unable to open key file ${OPTARG}"
+				usage
+			fi
+			;;
+		g)
+			retrieve_keys ${OPTARG}
+			KEY="$HOME/.ssh/${OPTARG}.pub"
+			;;
+		e)
+			mode="crypt"
+			;;
+	esac
+done
+shift $((OPTIND-1))
 
-	file=$1;
+file=$1;
 
-	if [[ "$mode" = "crypt"  ]]; then
-		if ! [[ -e "$KEY" ]]; then
-			echo "Unable to open public key file $KEY"
-			usage 
-		fi;
-    encrypt "$KEY" "$file"
-  elif [[ "$mode" = "decrypt" ]]; then
-		if ! [[ -r "$KEY" ]]; then
-			KEY="$HOME/.ssh/id_rsa"
-			echo "Loading default private key file $KEY" >& 2
-		fi;
-    decrypt "$KEY" "$file"
-  else
-		echo "Wrong mode $mode"
-    usage
-  fi;
-
+if [[ "$mode" = "crypt"  ]]; then
+	if ! [[ -e "$KEY" ]]; then
+		echo "Unable to open public key file $KEY"
+		usage 
+	fi;
+	encrypt "$KEY" "$file"
+elif [[ "$mode" = "decrypt" ]]; then
+	if ! [[ -r "$KEY" ]]; then
+		KEY="$HOME/.ssh/id_rsa"
+		echo "Loading default private key file $KEY" >& 2
+	fi;
+	decrypt "$KEY" "$file"
+else
+	echo "Wrong mode $mode"
+	usage
+fi;
