@@ -14,11 +14,11 @@ This project is loosely based on [Catacomb](https://github.com/twe4ked/catacomb)
 
 If it's your default RSA pubkey (`~/.ssh/id_rsa.pub`) that was used for encryption :
 
-`./rsaCrypt.sh file.enc > file`
+`./rsaCrypt.sh file.enc`
 
 If it's another RSA key, you will need to specify the correct private key 
 
-`./rsaCrypt.sh -i ~/.ssh/mykey_rsa file.enc > file`
+`./rsaCrypt.sh -i ~/.ssh/mykey_rsa file.enc`
 
 ## Encrypt a file
 
@@ -26,11 +26,11 @@ If it's another RSA key, you will need to specify the correct private key
 
 To **encrypt** (-e) a file for **gitlab** (-g) user _alice_
 
-`./rsaCrypt.sh -e -g alice file > file.enc`
+`./rsaCrypt.sh -e -g alice file`
 
 ### Via a stored public key
 
-`./rsaCrypt.sh -e -i ~/.ssh/alice.pub file > file.enc`
+`./rsaCrypt.sh -e -i ~/.ssh/alice.pub file`
 
 # How it works
 
