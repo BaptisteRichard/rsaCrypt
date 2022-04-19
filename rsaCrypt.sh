@@ -1,6 +1,9 @@
 #!/bin/bash 
 
 SEPARATOR="___"
+COMMENT="###"
+OPTS="-aes-256-cbc -md sha512 -pbkdf2 -iter 100000 -salt"
+VERSION=1.0.0
 
 encrypt() {
 
@@ -14,15 +17,18 @@ encrypt() {
 
 
 	# Generating random secret for file encryption 
-	openssl rand -base64 32 > "$TMP_KEY";
+	openssl rand -base64 64 > "$TMP_KEY";
+
+	echo -e "Encrypted with $0 version $VERSION using the following key : \n$(cat $PUBLIC_KEY) " | openssl base64 > "$TMP_OUT"
+	echo $COMMENT >> "$TMP_OUT"
 
 	# Crypt the secret key with public key
-	openssl rsautl -encrypt -pubin -inkey <(ssh-keygen -f "$PUBLIC_KEY" -e -m PKCS8) -ssl -in "$TMP_KEY" | openssl base64 > "$TMP_OUT"; 
+	openssl rsautl -encrypt -pubin -inkey <(ssh-keygen -f "$PUBLIC_KEY" -e -m PKCS8) -ssl -in "$TMP_KEY" | openssl base64 >> "$TMP_OUT"; 
 	# Add a separator between parts of the file
 	echo "$SEPARATOR" >> "$TMP_OUT"; 
 
 	# Crypt the original file with the secret key
-	openssl enc -aes-256-cbc -md sha512 -pbkdf2 -iter 100000 -salt -in $file -pass file:"$TMP_KEY" | openssl base64 >> "$TMP_OUT"
+	openssl enc $OPTS -in $file -pass file:"$TMP_KEY" | openssl base64 >> "$TMP_OUT"
 
 	outfile="${file}.enc"
 	cat "$TMP_OUT" > $outfile
@@ -34,18 +40,21 @@ decrypt () {
 
 	file=$2
 	key=$1
+	lines=$(wc -l < $file)
 
 	# Creating temporary files for encryption
 	TMP_OUT="$(mktemp "${TMPDIR:-/tmp}/$(basename "$0").XXXXXX.out")"
 	TMP_KEY="$(mktemp "${TMPDIR:-/tmp}/$(basename "$0").XXXXXX.key")"
 	trap 'shred "$TMP_OUT" "$TMP_KEY" && rm -rf "$TMP_OUT" "$TMP_KEY" ' EXIT SIGINT
 
+	# Get the comment part
+	grep -B $lines "$COMMENT" $file | grep -v "$COMMENT" | openssl base64 -d
 
 	# Get the key part
-	grep -B 100 "$SEPARATOR" $file | grep -v "$SEPARATOR" | openssl base64 -d > "$TMP_OUT"
+	grep -B $lines "$SEPARATOR" $file | grep -v "$SEPARATOR" | grep -A $lines "$COMMENT" | grep -v "$COMMENT" | openssl base64 -d > "$TMP_OUT"
 
 	# Try to decrypt the key
-	openssl rsautl -decrypt -inkey "$key" -in "$TMP_OUT" -out "$TMP_KEY"
+	openssl rsautl -decrypt -inkey "$key" -in "$TMP_OUT" -out "$TMP_KEY" 2> /dev/null
 
 	if  [[ $? -ne 0 ]] ; then
 
@@ -62,12 +71,11 @@ decrypt () {
 	fi
 
 	# Get the crypted file part
-	grep -A 100 "$SEPARATOR" $file | grep -v "$SEPARATOR" | openssl base64 -d > "$TMP_OUT"
-
+	grep -A $lines "$SEPARATOR" $file | grep -v "$SEPARATOR" | openssl base64 -d > "$TMP_OUT"
 	outfile=${file%.enc}
 
 	# Decrypting the file contents
-	openssl enc -d -aes-256-cbc  -md sha512 -pbkdf2 -iter 100000 -in "$TMP_OUT" -pass file:"$TMP_KEY" > $outfile
+	openssl enc -d -aes-256-cbc $OPTS -in "$TMP_OUT" -pass file:"$TMP_KEY" > $outfile
 
 }
 
@@ -141,3 +149,4 @@ else
 	echo "Wrong mode $mode"
 	usage
 fi;
+
