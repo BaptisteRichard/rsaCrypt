@@ -14,11 +14,11 @@ This project is loosely based on [Catacomb](https://github.com/twe4ked/catacomb)
 
 If it's your default RSA pubkey (`~/.ssh/id_rsa.pub`) that was used for encryption :
 
-`./rsaCrypt.sh file.enc`
+`bash file.enc.sh`
 
 If it's another RSA key, you will need to specify the correct private key 
 
-`./rsaCrypt.sh -i ~/.ssh/mykey_rsa file.enc`
+`bash file.enc -i ~/.ssh/mykey_rsa `
 
 ## Encrypt a file
 
@@ -36,7 +36,9 @@ To **encrypt** (-e) a file for **gitlab** (-g) user _alice_
 
 RSA allows for encryption of short messages with public key, but only up to the key modulus size. So it mostly can't be used to encrypt a file.
 
-rsaCrypt first creates a random secret key (_secret_) `aes256`, then encrypt the file with this _secret_. Then it encrypts the _secret_ with the provided RSA public key, smash it all together in a single string with a separator and BAM, you're done.
+rsaCrypt first copies itself at the beginning of the output file so it can be auto-executed by recipient.
+
+rsaCrypt then creates a random secret key (_secret_) `aes256` and encrypt the file with this _secret_. Then it encrypts the _secret_ with the provided RSA public key, smash it all together in a single string with a separator and BAM, you're done.
 
 Decryption consists in separating the message from the _secret_, decrypting the _secret_ with your private RSA key, and then decrypting the message with the _secret_
 
